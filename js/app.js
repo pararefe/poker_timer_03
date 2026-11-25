@@ -49,6 +49,7 @@ let totalTime = timeLeft;
 let endTimestamp = 0;                    // 終了予定の絶対時刻(ms)。裏タブでも狂わない
 let tickInterval = null;
 let lastPlayedSecond = null;
+let oneMinPlayed = false;   // 1分前SEをそのレベルで鳴らしたか
 let isRunning = false;
 let isViewerMode = false;
 let peer = null, connections = [], lastBroadcast = 0, viewerTimer = null, wakeLock = null;
@@ -268,17 +269,18 @@ function tick(){
   timeLeft = exact;
   const sec = Math.ceil(exact);
   if (sec !== lastPlayedSecond){
-    if (sec === 60 && totalTime > 60) playSE(sound1min);
-    else if (sec === 3) playSE(soundCount);
+    if (sec === 3) playSE(soundCount);
     lastPlayedSecond = sec;
   }
+  // ブラインドアップ1分前の告知SE（1min.mp3）。レベルごとに1回だけ
+  if (exact <= 60 && exact > 0 && !oneMinPlayed && totalTime > 60){ oneMinPlayed = true; playSE(sound1min); }
   updateDisplay(exact);
   if (exact <= 0){
     playSE(soundLevelUp);
     if (currentLevelIdx < structure.length - 1){
       currentLevelIdx++;
       totalTime = structure[currentLevelIdx].time * 60; timeLeft = totalTime;
-      endTimestamp = Date.now() + totalTime*1000; lastPlayedSecond = null;
+      endTimestamp = Date.now() + totalTime*1000; lastPlayedSecond = null; oneMinPlayed = false;
       updateDisplay(timeLeft); broadcastState(); persist();
     } else { pauseTimer(); isRunning = false; updateButton(); broadcastState(); persist(); }
   }
@@ -287,6 +289,7 @@ function startTimer(){
   if (tickInterval || isViewerMode) return;
   totalTime = structure[currentLevelIdx].time * 60;
   endTimestamp = Date.now() + timeLeft*1000;
+  oneMinPlayed = timeLeft <= 60;   // 残り1分以内から再開した場合は鳴らさない
   tickInterval = setInterval(tick, 100);
   requestWakeLock();
 }
@@ -314,7 +317,7 @@ function setLevel(idx, keepRunning = false){
   if (keepRunning && was){ startTimer(); isRunning = true; }
   updateDisplay(timeLeft); updateButton(); broadcastState(); persist();
 }
-function nextLevel(){ if (currentLevelIdx < structure.length-1) setLevel(currentLevelIdx+1, true); }
+function nextLevel(){ if (currentLevelIdx < structure.length-1) { playSE(soundLevelUp); setLevel(currentLevelIdx+1, true); } }
 function prevLevel(){ if (currentLevelIdx > 0) setLevel(currentLevelIdx-1, true); }
 function resetTimer(){ setLevel(0); }
 

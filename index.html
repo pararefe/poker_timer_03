@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poker Tournament Timer</title>
+<link rel="manifest" href="./manifest.json">
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- 存在しないフォント(KouzanGoshikiosho, RFP)を除外。1つでも無効だと全フォントが読み込まれない -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Chakra+Petch:wght@700&family=Cinzel:wght@700&family=Dela+Gothic+One&family=Fira+Code:wght@700&family=Graduate&family=Iceland&family=M+PLUS+1p:wght@800&family=M+PLUS+Rounded+1c:wght@800&family=Michroma&family=Montserrat:wght@800&family=Nico+Moji&family=Orbitron:wght@500;700;800;900&family=Oswald:wght@700&family=Permanent+Marker&family=Press+Start+2P&family=Rajdhani:wght@600;700&family=Righteous&family=Russo+One&family=Saira+Stencil+One&family=Share+Tech+Mono&family=Shippori+Mincho:wght@600;800&family=Space+Grotesk:wght@700&family=Teko:wght@600&family=VT323&family=Wallpoet&family=Yuji+Syuku&family=Zen+Dots&display=swap">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+<div class="timer-frame">
+  <div id="viewer-status" style="position:absolute;top:1vh;right:1.5vw;font-size:1rem;font-weight:bold;display:none;z-index:5"></div>
+  <div id="flash-notice">SETTINGS APPLIED</div>
+  <div class="main-section">
+    <div class="panel">
+      <div class="panel-header">TOURNAMENT INFO</div>
+      <div class="info-item">
+        <div class="info-label">Players Left / Entries:</div>
+        <div class="info-value">
+          <span id="players-left-display" class="big-num">10</span>
+          <button class="btn-small admin-only" onclick="changePlayersLeft(1)">+</button>
+          <button class="btn-small admin-only" onclick="changePlayersLeft(-1)">-</button>
+          <span style="color:var(--text-sub)">/</span>
+          <span id="total-entries-display" class="big-num">10</span>
+          <button class="btn-small admin-only" onclick="changeTotalEntries(1)">+</button>
+          <button class="btn-small admin-only" onclick="changeTotalEntries(-1)">-</button>
+        </div>
+      </div>
+      <div class="info-item"><div class="info-label">Avg Stack:</div><div class="info-value" id="avg-stack-display">10,000</div></div>
+      <div class="info-item"><div class="info-label">NEXT BLIND:</div><div class="info-value" id="next-blind-display"></div></div>
+      <div class="info-item"><div class="info-label">NEXT BREAK:</div><div class="info-value" id="next-break-display">-</div></div>
+    </div>
+
+    <div class="timer-wrapper">
+      <div class="timer-container" onclick="toggleTimer()">
+        <svg class="progress-ring" viewBox="-20 -20 330 330">
+          <circle class="progress-ring__circle_bg" r="130" cx="145" cy="145"/>
+          <circle class="progress-ring__circle_bar" r="130" cx="145" cy="145"/>
+        </svg>
+        <div class="timer-inner">
+          <p id="level-display">LEVEL 1</p>
+          <div id="time-display"><span class="time-part minutes" id="time-minutes">15</span><span class="time-colon">:</span><span class="time-part seconds" id="time-seconds">00</span></div>
+          <div id="timer-blinds-display"><div id="timer-sb-bb"></div><div id="timer-ante"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls-panel admin-only">
+      <button id="start-stop-btn" onclick="toggleTimer()">START</button>
+      <div class="btn-row"><button onclick="prevLevel()">◀ PREV</button><button onclick="nextLevel()">NEXT ▶</button></div>
+      <button onclick="if(confirm('タイマーをLEVEL 1にリセットしますか？'))resetTimer()">RESET</button>
+      <button onclick="openSettings()">SETTINGS ⚙️</button>
+      <button onclick="generateViewerURL()">SHARE URL 🔗</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal-content">
+    <div class="modal-header"><span>SETTINGS</span><button onclick="closeSettings()" style="padding:.2rem .6rem;height:auto;width:auto">✕</button></div>
+    <div class="modal-tabs">
+      <button class="tab-btn active" onclick="switchTab('blinds-tab',this)">ブラインド設定</button>
+      <button class="tab-btn" onclick="switchTab('stack-tab',this)">スタック・進行設定</button>
+      <button class="tab-btn" onclick="switchTab('design-tab',this)">デザイン設定 🎨</button>
+    </div>
+    <div class="tab-container">
+      <div id="blinds-tab" class="tab-content active">
+        <div class="preset-bar">
+          <span style="font-size:.85rem;color:var(--text-sub)">プリセット:</span>
+          <select id="preset-select" onchange="loadSelectedPreset()"></select>
+          <button class="btn-small" onclick="saveAsNewPreset()">新規保存</button>
+          <button class="btn-small" onclick="deletePreset()" style="border-color:#ff4d4d;color:#ff4d4d">削除</button>
+          <button class="btn-small" onclick="exportBlindsToExcel()" style="border-color:#2ed573;color:#2ed573">Excel出力 📊</button>
+          <button class="btn-small" onclick="document.getElementById('excel-file-input').click()" style="border-color:#1e90ff;color:#1e90ff">Excel読込 📂</button>
+          <input type="file" id="excel-file-input" accept=".xlsx,.xls" style="display:none" onchange="handleExcelImport(event)">
+        </div>
+        <div class="structure-summary"><span>⏱ 総所要時間: <strong id="total-structure-time-text">0分</strong></span><span style="font-size:.8em;opacity:.8">(プレイ時間 + BREAK時間)</span></div>
+        <div class="blinds-split-container">
+          <div class="blinds-list-panel">
+            <div class="blinds-list-scroll" id="blinds-list-scroll"></div>
+            <div style="display:flex;gap:.4rem;padding:.5rem;background:rgba(0,0,0,.3);border-top:1px solid var(--panel-border)">
+              <button onclick="addLevelRow(false)" style="flex:1;font-size:.75rem;height:auto;padding:.4rem 0">＋LEVEL</button>
+              <button onclick="addLevelRow(true)" style="flex:1;font-size:.75rem;border-color:var(--gold-accent);color:var(--gold-accent);height:auto;padding:.4rem 0">＋BREAK</button>
+            </div>
+          </div>
+          <div class="blind-detail-panel" id="blind-detail-panel">
+            <div class="blind-detail-title" id="detail-title">LEVEL 1</div>
+            <div style="display:flex;flex-direction:column;gap:1rem;flex:1">
+              <div class="form-group" id="group-sb"><label><span>スモールブラインド (SB)</span><span id="sb-step-hint" style="font-size:.75rem;color:var(--cyan-glow)"></span></label><input type="number" id="detail-sb" step="100" min="0"></div>
+              <div class="form-group" id="group-bb"><label>ビッグブラインド (BB)</label><input type="number" id="detail-bb" step="100" min="0"></div>
+              <div class="form-group" id="group-ante"><label>アンティ (ANTE)</label><input type="number" id="detail-ante" step="100" min="0"></div>
+              <div class="form-group"><label>時間 (分)</label><input type="number" id="detail-time" min="1" step="1"></div>
+              <div style="display:flex;gap:.5rem;margin-top:auto">
+                <button class="btn-small" onclick="moveSelectedRow(-1)" style="flex:1">▲ 上へ</button>
+                <button class="btn-small" onclick="moveSelectedRow(1)" style="flex:1">▼ 下へ</button>
+                <button class="btn-small" onclick="deleteSelectedRow()" style="border-color:#ff4d4d;color:#ff4d4d">削除 ✕</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="stack-tab" class="tab-content">
+        <div style="max-width:360px;margin:1rem auto 0">
+          <div class="form-group"><label>スタートスタック (5,000刻み)</label><input type="number" id="setting-start-stack" step="5000" min="0"></div>
+          <div class="form-group"><label>総エントリー数 (最大数)</label><input type="number" id="setting-total-entries" min="1"></div>
+        </div>
+      </div>
+
+      <div id="design-tab" class="tab-content">
+        <div class="design-container">
+          <div class="preview-box">
+            <div class="preview-label">REALTIME PREVIEW</div>
+            <div class="preview-level">LEVEL 1</div>
+            <div class="preview-timer"><span class="time-part minutes">15</span><span class="time-colon">:</span><span class="time-part seconds">00</span></div>
+            <div style="margin-top:1rem;font-size:.8rem;color:var(--gold-accent)">SB 1,000 / BB 2,000<br>ANTE 2,000</div>
+          </div>
+          <div class="form-group"><label>テーマカラーパレット（20色）</label><div class="color-grid" id="color-palette"></div></div>
+          <div class="form-group"><label>タイマー文字フォント (30種類)</label><select id="setting-timer-font" onchange="updateLivePreview()"></select></div>
+          <div class="form-group"><label><span>ネオン発光の明るさ</span><span id="glow-val-text">10%</span></label><input type="range" id="setting-glow-intensity" min="0.1" max="1.5" step="0.1" value="0.1" oninput="updateLivePreview()"></div>
+          <div class="accordion-section">
+            <div class="accordion-header" onclick="toggleAccordion()"><span>アドバンスド カスタム設定 ⚙️（上級者用）</span><span id="accordion-arrow">▼</span></div>
+            <div class="accordion-content" id="accordion-body">
+              <div>
+                <div class="rgb-row"><span style="color:#ff4d4d">R</span><input type="range" id="rgb-r" min="0" max="255" oninput="onRGBChange()"></div>
+                <div class="rgb-row"><span style="color:#39ff14">G</span><input type="range" id="rgb-g" min="0" max="255" oninput="onRGBChange()"></div>
+                <div class="rgb-row"><span style="color:#0066ff">B</span><input type="range" id="rgb-b" min="0" max="255" oninput="onRGBChange()"></div>
+              </div>
+              <div>
+                <div class="color-picker-row"><label>ブラインド数字カラー</label><input type="color" id="custom-blind-color" onchange="updateLivePreview()"></div>
+                <div class="color-picker-row"><label>タイマー数字カラー</label><input type="color" id="custom-timer-color" onchange="updateLivePreview()"></div>
+                <div class="color-picker-row"><label>サブテキストカラー</label><input type="color" id="custom-sub-color" onchange="updateLivePreview()"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="backup-controls">
+        <button class="btn-small" onclick="exportConfig()">JSON保存 📥</button>
+        <button class="btn-small" onclick="document.getElementById('import-file-input').click()">JSON読み込み 📤</button>
+        <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="handleImportFile(event)">
+      </div>
+      <button onclick="saveSettings()" style="background:var(--cyan-dim);border-color:var(--cyan-glow);color:var(--cyan-glow);height:auto;width:auto;padding:.5rem 1rem">SAVE &amp; APPLY</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHARE -->
+<div class="modal-overlay" id="share-modal">
+  <div class="modal-content" style="width:440px;height:auto">
+    <div style="padding:1rem 0;display:flex;flex-direction:column;align-items:center;gap:1.2rem">
+      <div id="share-warn" style="color:#ff9f43;font-size:.8rem;line-height:1.4;width:100%"></div>
+      <div id="qrcode-display" style="background:#fff;padding:14px;border-radius:12px"></div>
+      <div id="share-viewers" style="font-size:.9rem;color:var(--cyan-glow)">接続中の子機: 0台</div>
+      <div style="width:100%">
+        <label style="font-size:.85rem;color:var(--text-sub)">このタイマーのURL（スマホから開けるURL）</label>
+        <input type="text" id="share-base-input" oninput="renderShare()" style="text-align:left;font-size:.85rem;margin-top:.4rem" placeholder="https://example.com/index.html">
+      </div>
+      <div style="width:100%">
+        <label style="font-size:.85rem;color:var(--text-sub)">共有用 URL</label>
+        <div style="display:flex;gap:.5rem;margin-top:.4rem">
+          <input type="text" id="share-url-input" readonly style="flex:1;text-align:left;font-size:.85rem">
+          <button onclick="copyShareUrl()" style="width:auto;padding:0 1rem;font-size:.85rem;background:var(--cyan-dim);border-color:var(--cyan-glow);color:var(--cyan-glow);white-space:nowrap">URLコピー 📋</button>
+        </div>
+      </div>
+      <div id="copy-status-msg" style="font-size:.85rem;color:var(--cyan-glow);font-weight:bold;height:1.2rem;opacity:0;transition:opacity .3s">コピーしました！</div>
+    </div>
+  </div>
+</div>
+
+<script src="./js/app.js"></script>
+</body>
+</html>

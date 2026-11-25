@@ -1,6 +1,19 @@
 // ===== 効果音 =====
 const sound1min = new Audio('1min.mp3'), soundCount = new Audio('count.mp3'), soundLevelUp = new Audio('LevelUP.mp3');
 function playSE(a){ try{ a.currentTime=0; a.play().catch(()=>{}); }catch(e){} }
+// 読み込み失敗（ファイル名違い・置き場所違い）の検出と、設定画面での効果音テスト
+const seErr = {};
+[[sound1min,'1min.mp3'],[soundLevelUp,'LevelUP.mp3']].forEach(([a,n]) => { a.preload='auto'; a.addEventListener('error', () => { seErr[n]=true; refreshSEStatus(); }); a.load(); });
+function refreshSEStatus(msg){
+  const e = document.getElementById('se-status'); if (!e) return;
+  const miss = Object.keys(seErr);
+  e.textContent = msg || (miss.length ? '⚠ 読み込めないファイル: ' + miss.join(', ') + '（ファイル名の大文字小文字と置き場所を確認）' : '');
+}
+function testSE(k){
+  const a = k === '1min' ? sound1min : soundLevelUp;
+  a.muted = false; a.currentTime = 0;
+  a.play().then(() => refreshSEStatus('再生OK')).catch(err => refreshSEStatus('再生できません: ' + err.name + '（ファイルが無い、または端末の音量/マナーモードを確認）'));
+}
 // スマホ等の自動再生制限対策：最初のタップで音声を解除
 document.addEventListener('click', () => {
   [sound1min, soundCount, soundLevelUp].forEach(a => { a.muted=true; a.play().then(()=>{a.pause();a.currentTime=0;a.muted=false;}).catch(()=>{a.muted=false;}); });
@@ -410,6 +423,7 @@ function addLevelRow(isBreak = false){
   selectedIndex = editingStructure.length - 1; renderBlindsList();
 }
 function openSettings(){
+  refreshSEStatus();
   designSnapshot = clone(designConfig);
   renderPresetDropdown(); editingStructure = clone(structure); selectedIndex = 0; renderBlindsList();
   $('setting-start-stack').value = tournamentInfo.startStack; $('setting-total-entries').value = tournamentInfo.totalEntries;

@@ -112,6 +112,10 @@
         <div style="max-width:360px;margin:1rem auto 0">
           <div class="form-group"><label>スタートスタック (5,000刻み)</label><input type="number" id="setting-start-stack" step="5000" min="0"></div>
           <div class="form-group"><label>総エントリー数 (最大数)</label><input type="number" id="setting-total-entries" min="1"></div>
+          <div class="form-group"><label>効果音テスト</label>
+            <div style="display:flex;gap:.5rem"><button class="btn-small" onclick="testSE('1min')" style="flex:1">1分前SE ▶</button><button class="btn-small" onclick="testSE('lvup')" style="flex:1">ブラインドアップSE ▶</button></div>
+            <div id="se-status" style="font-size:.8rem;color:var(--gold-accent);min-height:1.2em"></div>
+          </div>
         </div>
       </div>
 
